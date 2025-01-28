@@ -1,0 +1,57 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-01-28 09:28:37.564523",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "username",
+  "password",
+  "enabled"
+ ],
+ "fields": [
+  {
+   "fieldname": "username",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Username",
+   "reqd": 1
+  },
+  {
+   "fieldname": "password",
+   "fieldtype": "Password",
+   "in_list_view": 1,
+   "label": "Password",
+   "reqd": 1
+  },
+  {
+   "default": 0,
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2025-01-28 09:29:50.080003",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "HST Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

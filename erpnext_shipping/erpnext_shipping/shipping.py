@@ -15,6 +15,23 @@ from erpnext_shipping.erpnext_shipping.utils import (
 	get_contact,
 	match_parcel_service_type_carrier,
 )
+from zeep import Client
+from frappe.utils.password import get_decrypted_password
+
+HST_PROVIDER = "HST"
+
+def get_hst_client():
+    wsdl = "https://www.hst.nl/ns/portal/1.0/?wsdl"
+    settings = frappe.get_single("HST Settings")
+    password = get_decrypted_password("HST Settings", "HST Settings", "password")
+    client = Client(wsdl)
+    client.set_default_soapheaders([{
+        'authentication': {
+            'username': settings.username,
+            'password': password
+        }
+    }])
+    return client
 
 
 @frappe.whitelist()
@@ -34,6 +51,7 @@ def fetch_shipping_rates(
 	shipment_prices = []
 	letmeship_enabled = frappe.db.get_single_value("LetMeShip", "enabled")
 	sendcloud_enabled = frappe.db.get_single_value("SendCloud", "enabled")
+	hst_enabled = frappe.db.get_single_value("HST Settings", "enabled")
 	pickup_address = get_address(pickup_address_name)
 	delivery_address = get_address(delivery_address_name)
 	parcels = json.loads(parcels)
@@ -74,6 +92,10 @@ def fetch_shipping_rates(
 		)
 		sendcloud_prices = match_parcel_service_type_carrier(sendcloud_prices, "carrier", "service_name")
 		shipment_prices += sendcloud_prices
+
+	if hst_enabled:
+		# Add logic to fetch HST shipping rates if available
+		pass
 
 	shipment_prices = sorted(shipment_prices, key=lambda k: k["total_price"])
 	return shipment_prices
@@ -142,6 +164,18 @@ def create_shipment(
 			value_of_goods=value_of_goods,
 			delivery_contact=delivery_contact,
 			service_info=service_info,
+		)
+
+	if service_info["service_provider"] == HST_PROVIDER:
+		shipment_info = create_hst_shipment(
+			pickup_address_name=pickup_address_name,
+			delivery_address_name=delivery_address_name,
+			shipment_parcel=shipment_parcel,
+			description_of_content=description_of_content,
+			pickup_date=pickup_date,
+			value_of_goods=value_of_goods,
+			pickup_contact_name=pickup_contact_name,
+			delivery_contact_name=delivery_contact_name,
 		)
 
 	if shipment_info:
@@ -225,6 +259,8 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 	elif service_provider == SENDCLOUD_PROVIDER:
 		sendcloud = SendCloudUtils()
 		tracking_data = sendcloud.get_tracking_data(shipment_id)
+	elif service_provider == HST_PROVIDER:
+		tracking_data = update_hst_tracking(shipment_id)
 
 	if not tracking_data:
 		return
@@ -262,3 +298,77 @@ def update_delivery_note(delivery_notes, shipment_info=None, tracking_info=None)
 			dl_doc.db_set("tracking_url", tracking_info.get("tracking_url"))
 			dl_doc.db_set("tracking_status", tracking_info.get("tracking_status"))
 			dl_doc.db_set("tracking_status_info", tracking_info.get("tracking_status_info"))
+
+
+@frappe.whitelist()
+def create_hst_shipment(
+    pickup_address_name,
+    delivery_address_name,
+    shipment_parcel,
+    description_of_content,
+    pickup_date,
+    value_of_goods,
+    pickup_contact_name=None,
+    delivery_contact_name=None,
+):
+    client = get_hst_client()
+    pickup_address = get_address(pickup_address_name)
+    delivery_address = get_address(delivery_address_name)
+    pickup_contact = get_contact(pickup_contact_name)
+    delivery_contact = get_contact(delivery_contact_name)
+
+    # Construct the request data
+    request_data = {
+        "CustomerReference": "Referentie",
+        "OrderType": "DELIVERY_LARGE",
+        "TransportOrderLine_TransportOrder": {
+            "TransportOrderLine": {
+                "Quantity": 1,
+                "GoodsDescription": description_of_content,
+                "ExchangePacking": True,
+                "Length": shipment_parcel["length"],
+                "Width": shipment_parcel["width"],
+                "Height": shipment_parcel["height"],
+                "Weight": shipment_parcel["weight"],
+                "TransportOrderLine_PackageUnit": {
+                    "PackageUnit": {
+                        "PackageUnitID": "EP"
+                    }
+                }
+            }
+        },
+        "TransportOrder_ToAddress": {
+            "Address": {
+                "Name": delivery_contact["first_name"] + " " + delivery_contact["last_name"],
+                "Street": delivery_address["address_line1"],
+                "StreetNumber": delivery_address["address_line2"],
+                "ZipCode": delivery_address["pincode"],
+                "City": delivery_address["city"],
+                "Country": delivery_address["country_code"]
+            }
+        },
+        "TransportOrder_FromAddress": {
+            "Address": {
+                "Name": pickup_contact["first_name"] + " " + pickup_contact["last_name"],
+                "Street": pickup_address["address_line1"],
+                "StreetNumber": pickup_address["address_line2"],
+                "ZipCode": pickup_address["pincode"],
+                "City": pickup_address["city"],
+                "Country": pickup_address["country_code"]
+            }
+        },
+        "TransportOrder_Customer": {
+            "Customer": {
+                "CustomerID": "KLANTNUMMER"
+            }
+        }
+    }
+
+    response = client.service.CreateTransportOrder(request_data)
+    return response
+
+@frappe.whitelist()
+def update_hst_tracking(order_number):
+    client = get_hst_client()
+    response = client.service.RequestOrderStatus({"OrderNumber": order_number})
+    return response

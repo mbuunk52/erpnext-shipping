@@ -14,6 +14,10 @@ def get_tracking_url(carrier, tracking_number):
 	return tracking_url
 
 
+def get_hst_tracking_url(order_number):
+    return f"https://www.hst.nl/track-trace?order_number={order_number}"
+
+
 def get_address(address_name):
 	address = frappe.db.get_value(
 		"Address",

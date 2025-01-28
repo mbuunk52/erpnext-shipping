@@ -6,4 +6,7 @@ from frappe.model.document import Document
 
 
 class ParcelService(Document):
-	pass
+    pass
+
+def get_parcel_service_providers():
+    return ["LetMeShip", "SendCloud", "HST"]
